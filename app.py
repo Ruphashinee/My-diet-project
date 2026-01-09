@@ -14,20 +14,21 @@ class DietOptimizerEP:
         self.target_cal = target_cal
         
     def create_individual(self):
-        """Creates a random meal combination."""
-        # We assume each meal costs $2-$10 based on its calories
-        b = self.b_df.sample(n=1).iloc[0]
-        l = self.l_df.sample(n=1).iloc[0]
-        d = self.d_df.sample(n=1).iloc[0]
-        s = self.s_df.sample(n=1).iloc[0]
+        # We assign a realistic price based on calories for the simulation
+        b = self.b_df.sample(n=1).iloc[0].to_dict()
+        l = self.l_df.sample(n=1).iloc[0].to_dict()
+        d = self.d_df.sample(n=1).iloc[0].to_dict()
+        s = self.s_df.sample(n=1).iloc[0].to_dict()
         
-        total_cal = b['Calories'] + l['Calories'] + d['Calories'] + s['Calories']
-        total_prot = b['Protein'] + l['Protein'] + d['Protein'] + s['Protein']
-        # Price calculation: $0.005 per calorie
-        total_price = total_cal * 0.005 
+        # Calculate totals
+        meals = [b, l, d, s]
+        total_cal = sum(m['Calories'] for m in meals)
+        total_prot = sum(m['Protein'] for m in meals)
+        # Price Formula: $2 base + small amount per calorie (minimizing this is the goal!)
+        total_price = sum((m['Calories'] * 0.005) + 1.5 for m in meals)
         
         return {
-            'meals': [b, l, d, s],
+            'meals': meals,
             'calories': total_cal,
             'price': total_price,
             'protein': total_prot,
@@ -35,89 +36,90 @@ class DietOptimizerEP:
         }
 
     def calculate_fitness(self, ind):
-        """Lower score is better. Penalty for calorie gap + price."""
-        cal_gap = abs(ind['calories'] - self.target_cal)
-        # Multi-objective: Minimize calorie gap AND minimize price
-        return cal_gap + (ind['price'] * 10)
+        # Multi-Objective: Minimize Calorie Error AND Minimize Total Price
+        cal_error = abs(ind['calories'] - self.target_cal)
+        return cal_error + (ind['price'] * 15)  # Multiplying price by 15 makes cost very important
 
     def mutate(self, ind):
-        """EP Mutation: Change ONE random meal in the plan."""
-        new_ind = ind.copy()
-        meal_to_change = np.random.randint(0, 4)
-        if meal_to_change == 0: new_meal = self.b_df.sample(n=1).iloc[0]
-        elif meal_to_change == 1: new_meal = self.l_df.sample(n=1).iloc[0]
-        elif meal_to_change == 2: new_meal = self.d_df.sample(n=1).iloc[0]
-        else: new_meal = self.s_df.sample(n=1).iloc[0]
+        new_ind = {
+            'meals': list(ind['meals']),
+            'calories': 0,
+            'price': 0,
+            'protein': 0
+        }
+        # Change ONE meal randomly
+        idx = np.random.randint(0, 4)
+        if idx == 0: new_ind['meals'][0] = self.b_df.sample(n=1).iloc[0].to_dict()
+        elif idx == 1: new_ind['meals'][1] = self.l_df.sample(n=1).iloc[0].to_dict()
+        elif idx == 2: new_ind['meals'][2] = self.d_df.sample(n=1).iloc[0].to_dict()
+        else: new_ind['meals'][3] = self.s_df.sample(n=1).iloc[0].to_dict()
         
-        new_ind['meals'][meal_to_change] = new_meal
-        # Recalculate stats
+        # Update stats for the new combination
         new_ind['calories'] = sum(m['Calories'] for m in new_ind['meals'])
-        new_ind['price'] = new_ind['calories'] * 0.005
+        new_ind['price'] = sum((m['Calories'] * 0.005) + 1.5 for m in new_ind['meals'])
         new_ind['protein'] = sum(m['Protein'] for m in new_ind['meals'])
         return new_ind
 
-    def run(self, pop_size=50, gens=100):
-        # Initial Population
+    def run(self, pop_size=50, gens=50):
         population = [self.create_individual() for _ in range(pop_size)]
         history = []
-
         for _ in range(gens):
-            # Evaluate current population
-            for ind in population:
-                ind['fitness'] = self.calculate_fitness(ind)
-            
-            # Create offspring via mutation
+            for ind in population: ind['fitness'] = self.calculate_fitness(ind)
             offspring = [self.mutate(p) for p in population]
-            for o in offspring:
-                o['fitness'] = self.calculate_fitness(o)
-            
-            # Selection: Survival of the fittest
+            for o in offspring: o['fitness'] = self.calculate_fitness(o)
             combined = population + offspring
             combined.sort(key=lambda x: x['fitness'])
             population = combined[:pop_size]
             history.append(population[0]['fitness'])
-            
         return population[0], history
 
-# --- 2. THE UI: Streamlit ---
-st.set_page_config(page_title="Professional Diet Optimizer", layout="wide")
-st.title("🍎 Multi-Objective Meal Combinator (EP)")
+# --- 2. THE UI: Streamlit Dashboard ---
+st.set_page_config(page_title="Evolutionary Diet Optimizer", layout="wide")
+st.title("🥗 Evolutionary Diet Optimizer")
+st.write("Using **Evolutionary Programming** to minimize cost and meet nutrition goals.")
 
-# Load and split data
-csv_files = [f for f in os.listdir() if f.endswith('.csv')]
-if csv_files:
-    raw_df = pd.read_csv(csv_files[0])
+# Load Data
+if os.path.exists('Food_and_Nutrition__.csv'):
+    df = pd.read_csv('Food_and_Nutrition__.csv')
+    b_pool = df[['Breakfast Suggestion', 'Calories', 'Protein']].drop_duplicates()
+    l_pool = df[['Lunch Suggestion', 'Calories', 'Protein']].drop_duplicates()
+    d_pool = df[['Dinner Suggestion', 'Calories', 'Protein']].drop_duplicates()
+    s_pool = df[['Snack Suggestion', 'Calories', 'Protein']].drop_duplicates()
+
+    # Sidebar
+    st.sidebar.header("Targets")
+    target_c = st.sidebar.slider("Calories Goal", 1200, 3500, 2000)
     
-    # Split into meal pools
-    b_pool = raw_df[['Breakfast Suggestion', 'Calories', 'Protein']].drop_duplicates()
-    l_pool = raw_df[['Lunch Suggestion', 'Calories', 'Protein']].drop_duplicates()
-    d_pool = raw_df[['Dinner Suggestion', 'Calories', 'Protein']].drop_duplicates()
-    s_pool = raw_df[['Snack Suggestion', 'Calories', 'Protein']].drop_duplicates()
+    if st.sidebar.button("Run Optimizer"):
+        solver = DietOptimizerEP(b_pool, l_pool, d_pool, s_pool, target_c)
+        winner, history = solver.run()
 
-    with st.sidebar:
-        target = st.number_input("Target Daily Calories", value=2000)
-        pop_s = st.slider("Population", 10, 100, 50)
-        gen_s = st.slider("Generations", 10, 200, 100)
+        # --- RESULTS AREA ---
+        st.subheader("✅ Optimized Results")
+        col1, col2, col3 = st.columns(3)
+        
+        # HERE IS THE COST!
+        col1.metric("Total Calories", f"{winner['calories']} kcal")
+        col2.metric("MINIMIZED COST", f"${winner['price']:.2f}", delta="Lowest Found")
+        col3.metric("Total Protein", f"{winner['protein']}g")
 
-    if st.button("Generate Best Combination"):
-        optimizer = DietOptimizerEP(b_pool, l_pool, d_pool, s_pool, target)
-        winner, log = optimizer.run(pop_s, gen_s)
+        st.markdown("### 🍽️ Recommended Meal Combination")
+        labels = ["🍳 Breakfast", "🥗 Lunch", "🍲 Dinner", "🍎 Snack"]
+        keys = ["Breakfast Suggestion", "Lunch Suggestion", "Dinner Suggestion", "Snack Suggestion"]
+        
+        for i in range(4):
+            meal_name = winner['meals'][i][keys[i]]
+            meal_price = (winner['meals'][i]['Calories'] * 0.005) + 1.5
+            st.write(f"**{labels[i]}:** {meal_name} — *Cost: ${meal_price:.2f}*")
 
-        # Show Results
-        st.subheader("✅ Best Found Combination")
-        cols = st.columns(3)
-        cols[0].metric("Total Calories", f"{winner['calories']} kcal")
-        cols[1].metric("Total Cost", f"${winner['price']:.2f}")
-        cols[2].metric("Total Protein", f"{winner['protein']}g")
-
-        # Menu Table
-        meal_names = ["Breakfast", "Lunch", "Dinner", "Snack"]
-        for i, m in enumerate(winner['meals']):
-            name_col = list(m.keys())[0]
-            st.write(f"**{meal_names[i]}:** {m[name_col]} ({m['Calories']} kcal)")
-
-        # Analysis Graph
-        st.line_chart(log)
-        st.caption("Evolutionary Programming Performance: Fitness (Penalty) vs Generation")
+        # --- GRAPH ---
+        st.markdown("---")
+        st.subheader("📈 Performance Analysis (Convergence)")
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.plot(history, color='#1E88E5', linewidth=2)
+        ax.set_ylabel("Fitness (Penalty Score)")
+        ax.set_xlabel("Generation")
+        st.pyplot(fig)
+        st.info("The graph shows the 'Penalty' dropping. This means the AI found a plan that is closer to the calorie goal and CHEAPER over time.")
 else:
-    st.error("Please upload the CSV file!")
+    st.error("CSV file not found. Please upload 'Food_and_Nutrition__.csv' to GitHub.")
