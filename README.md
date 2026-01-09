@@ -1,14 +1,17 @@
-# Diet Meal Planning Optimization 
-## Using Evolutionary Programming (EP)
+# Diet Meal Planning Optimisation using Evolutionary Programming
 
-### Project Overview
-This project uses **Evolutionary Programming** to solve a multi-objective optimization problem: finding a daily meal plan that satisfies nutritional targets (calories) while minimizing the total cost.
+## Course
+JIE42903 – Evolutionary Computing
 
-### Key Features
-- **Algorithm:** Evolutionary Programming (Mutation-based search).
-- **Multi-Objective:** Balances Calorie accuracy and Cost efficiency.
-- **Interactive Dashboard:** Built with Streamlit for dynamic parameter tuning.
+## Objective
+The objective of this project is to select a daily meal plan that satisfies basic nutritional requirements while minimising total cost.
 
-### How to Run
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run app: `streamlit run app.py`
+## Method
+This project applies Evolutionary Programming (EP) to optimise diet meal selection under nutritional constraints.
+
+## Dataset
+Food_and_Nutrition__.csv
+
+## Streamlit App
+(To be added)
+
